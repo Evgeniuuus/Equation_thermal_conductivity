@@ -41,6 +41,6 @@ def plot_solution(X, T, U):
     plt.show()
 
 
-for h, points in [(0.1, 11), (0.05, 51), (0.01, 101)]:
+for h, points in [(0.1, 11), (0.05, 21), (0.01, 101)]:
     X, T, U = solve(h=h, points=points)
     plot_solution(X, T, U)

@@ -1,140 +1,104 @@
+'''
+"nj dct ytghfdkbmyj!
+
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.sparse import diags
 
 
-class Model:
-    def __init__(self, h=0.1, start=0, points=51, T=1):
-        self.h = h
-        self.tau = self.h ** 2 / 2
-        print(f"tau={self.tau}")
-        self.vmin = 0
-        self.vmax = None
-        self.start = start
-        self.end = 1
-        self.T = T
-        self.time_steps = int(self.T / self.tau)
-        print(f"time_steps= {self.time_steps}")
-        self.x = np.linspace(self.start, self.end, points)
-        self.t = np.linspace(0, self.T, self.time_steps + 1)
-        print(f"x = {len(self.x)}")
-        print(f"t = {len(self.t)}")
+def method_progonki(a, b, c, d):
+    n = len(d)
+    alpha = np.zeros(n)
+    beta = np.zeros(n)
 
-        self.X, self.T = np.meshgrid(self.x, self.t)
-        self.Z = np.zeros_like(self.X)
-        self.Z[0, :] = self.X[0, :] ** 2
-        self.Z[:, 0] = self.T[:, 0]
+    # Прямой ход
+    alpha[0] = -c[0] / b[0]
+    beta[0] = d[0] / b[0]
 
-    def __iterate(self):
-        for n in range(self.time_steps):
-            for i in range(1, len(self.x) - 1):
-                # du/dt = t*d²u/dx² + x*du/dx + x*t
-                d2u_dx2 = (self.Z[n, i + 1] - 2 * self.Z[n, i] + self.Z[n, i - 1]) / self.h ** 2
-                du_dx = (self.Z[n, i + 1] - self.Z[n, i - 1]) / (2 * self.h)
-                self.Z[n + 1, i] = self.Z[n, i] + self.tau * (
-                        self.t[n] * d2u_dx2 +
-                        self.x[i] * du_dx +
-                        self.x[i] * self.t[n]
-                )
+    for i in range(1, n):
+        alpha[i] = -c[i] / (b[i] + a[i] * alpha[i - 1])
+        beta[i] = (d[i] - a[i] * beta[i - 1]) / (b[i] + a[i] * alpha[i - 1])
 
-                # Граничные условия
-                self.Z[n + 1, 0] = self.t[n + 1]  # левая граница
-                self.Z[n + 1, -1] = self.t[n + 1] + 1  # правая граница
+    # Обратный ход
+    y = np.zeros(n)
+    y[-1] = beta[-1]
 
-    def __iterate_2(self):
-        for n in range(self.time_steps):
-            # Коэффициент для разностной схемы
-            sigma = self.t[n] * self.tau / self.h ** 2
+    for i in range(n - 2, -1, -1):
+        y[i] = alpha[i] * y[i + 1] + beta[i]
 
-            # Прямой ход метода прогонки
-            alpha = np.zeros(len(self.x))
-            beta = np.zeros(len(self.x))
-
-            # Левое граничное условие (уже установлено)
-            alpha[0] = 0
-            beta[0] = self.t[n + 1]  # U(0,t) = t
-
-            # Вычисление прогоночных коэффициентов
-            for i in range(1, len(self.x) - 1):
-                # Правая часть уравнения: x*t + U_prev/dt
-                phi = self.x[i] * self.t[n] + self.Z[n, i] / self.tau
-
-                a_i = sigma
-                b_i = -(1 + 2 * sigma + self.x[i] * self.h / (2 * self.t[n]) if self.t[n] != 0 else 0)
-                c_i = sigma
-                d_i = -phi - (self.x[i] / (2 * self.h)) * (self.Z[n, i + 1] - self.Z[n, i - 1]) if self.t[n] != 0 else 0
-
-                denominator = b_i - a_i * alpha[i - 1]
-                alpha[i] = c_i / denominator
-                beta[i] = (a_i * beta[i - 1] - d_i) / denominator
-
-                # Обратный ход метода прогонки
-                # Правое граничное условие уже установлено (U(1,t) = 1 + t)
-                for i in range(len(self.x) - 2, 0, -1):
-                    self.Z[n + 1, i] = alpha[i] * self.Z[n + 1, i + 1] + beta[i]
-
-    def draw(self):
-        self.__iterate()
-
-        fig, ax = plt.subplots(figsize=(10, 6))
-
-        im = ax.imshow(self.Z,
-                       vmax=np.max(self.Z),
-                       vmin=0,
-                       cmap="viridis",
-                       aspect='auto',
-                       origin='lower',
-                       extent=[self.x.min(), self.x.max(), self.t.min(), self.t.max()])
-
-        contours = ax.contour(self.X, self.T, self.Z,
-                              colors='white', linewidths=0.5, levels=10)
-
-        cbar = plt.colorbar(im)
-
-        ax.clabel(contours, inline=True, fontsize=8, fmt='%1.1f')
-
-        plt.xlabel("X")
-        plt.ylabel("T")
-
-        plt.show()
-
-    def draw_2(self):
-        self.__iterate_2()
-
-        # Создаем фигуру и оси
-        fig, ax = plt.subplots(figsize=(10, 6))
-
-        # Отображаем тепловую карту
-        im = ax.imshow(self.Z,
-                       vmax=np.max(self.Z),
-                       vmin=0,
-                       cmap="magma",
-                       aspect='auto',
-                       origin='lower',
-                       extent=[self.x.min(), self.x.max(), self.t.min(), self.t.max()])
-
-        contours = ax.contour(self.X, self.T, self.Z,
-                              colors='white', linewidths=0.5, levels=10)
-
-        cbar = plt.colorbar(im)
-
-        ax.clabel(contours, inline=True, fontsize=8, fmt='%1.1f')
-
-        plt.xlabel("X")
-        plt.ylabel("T")
-
-        plt.show()
+    return y
 
 
+def solve_implicit(h=0.1, points=11, T=1):
+    tau = h ** 2 / 2
+    time_steps = int(T / tau)
+    x = np.linspace(0, 1, points)
+    t = np.linspace(0, T, time_steps + 1)
 
-# Задание 1
+    print(f"\nШаг h={h}, точек={points}\n"
+          f"Шаг по времени tau={tau:.4f}, шагов={time_steps}\n")
 
-model = Model(h=0.1, points=11)
-model.draw()
+    X, T_mesh = np.meshgrid(x, t)
+    U = np.zeros_like(X)
+
+    U[0, :] = X[0, :] ** 2  # u(x,0) = x²
+    U[:, 0] = T_mesh[:, 0]  # u(0,t) = t
+    U[:, -1] = T_mesh[:, -1] + 1  # u(1,t) = t + 1
+
+    for n in range(time_steps):
+        # Коэффициенты для матрицы
+        alpha_coeff = -tau * t[n + 1] / (2 * h ** 2)
+        beta_coeff = 1 + tau * t[n + 1] / h ** 2
+        gamma_coeff = -tau * t[n + 1] / (2 * h ** 2)
+        delta = tau * x[1:-1] / (4 * h)
+
+        # Подготовка коэффициентов для прогонки
+        a = (alpha_coeff - delta[:-1]) * np.ones(points - 2)  # нижняя диагональ
+        b = beta_coeff * np.ones(points - 2)  # главная диагональ
+        c = (gamma_coeff + delta[1:]) * np.ones(points - 2)  # верхняя диагональ
+
+        # Первый и последний элементы должны быть обработаны отдельно
+        a[0] = 0  # не используется для первого уравнения
+        c[-1] = 0  # не используется для последнего уравнения
+
+        rhs = np.zeros(points - 2)
+        for i in range(1, points - 1):
+            d2u_old = (U[n, i + 1] - 2 * U[n, i] + U[n, i - 1]) / h ** 2
+            du_old = (U[n, i + 1] - U[n, i - 1]) / (2 * h)
+            explicit_part = U[n, i] + tau / 2 * (t[n] * d2u_old + x[i] * du_old + x[i] * t[n])
+
+            d2u_new = (U[n, i + 1] - 2 * U[n, i] + U[n, i - 1]) / h ** 2  # начальное приближение
+            du_new = (U[n, i + 1] - U[n, i - 1]) / (2 * h)
+            implicit_part = tau / 2 * (t[n + 1] * d2u_new + x[i] * du_new + x[i] * t[n + 1])
+
+            rhs[i - 1] = explicit_part + implicit_part
+
+        # Учет граничных условий
+        rhs[0] -= (alpha_coeff - delta[0]) * U[n + 1, 0]
+        rhs[-1] -= (gamma_coeff + delta[-1]) * U[n + 1, -1]
+
+        # Решение СЛАУ методом прогонки
+        U[n + 1, 1:-1] = method_progonki(a, b, c, rhs)
+
+    return X, T_mesh, U
 
 
-model = Model(h=0.05, points=51)
-model.draw()
+def plot_solution(X, T, U):
+    plt.figure(figsize=(10, 6))
+
+    im = plt.imshow(U, cmap="viridis", aspect='auto', origin='lower',
+                    extent=[X.min(), X.max(), T.min(), T.max()])
+
+    contours = plt.contour(X, T, U, colors='white', linewidths=0.5, levels=10)
+    plt.clabel(contours, inline=True, fontsize=8)
+
+    plt.colorbar(im, label='u(x,t)')
+    plt.xlabel("x"), plt.ylabel("t")
+    plt.title(f"Неявная схема с методом прогонки ({X.shape[1]} узлов)")
+    plt.show()
 
 
-model = Model(h=0.01, points=101)
-model.draw()
+for h, points in [(0.1, 11), (0.05, 51), (0.01, 101)]:
+    X, T, U = solve_implicit(h=h, points=points)
+    plot_solution(X, T, U)
+'''
